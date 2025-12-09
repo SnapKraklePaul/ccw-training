@@ -1,0 +1,519 @@
+// Prisma Schema for CCW Training Platform
+// This defines our database structure with PostgreSQL
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+// ============================================================================
+// USER MANAGEMENT
+// ============================================================================
+
+enum UserRole {
+  USER  // Regular student
+  ADMIN // Administrator with full access
+}
+
+enum AuthProvider {
+  EMAIL  // Traditional email/password
+  GOOGLE // Google OAuth
+  APPLE  // Apple Sign In
+}
+
+model User {
+  id            String    @id @default(cuid()) // Unique identifier
+  email         String    @unique // User's email (unique across platform)
+  emailVerified DateTime? // When email was verified (null if not verified)
+  name          String? // Full name (optional, can be from OAuth)
+  password      String? // Hashed password (null for OAuth users)
+  role          UserRole  @default(USER) // User role for permissions
+  authProvider  AuthProvider @default(EMAIL) // How they signed up
+  
+  // Account status
+  isActive      Boolean   @default(true) // Can be set to false to ban user
+  isSuspended   Boolean   @default(false) // Temporary suspension
+  
+  // Timestamps
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  
+  // Relations
+  accounts      Account[] // For OAuth (NextAuth requirement)
+  sessions      Session[] // Active login sessions (NextAuth requirement)
+  enrollments   Enrollment[] // Courses user has purchased
+  quizAttempts  QuizAttempt[] // All quiz attempts
+  certificates  Certificate[] // Earned certificates
+  orders        Order[] // Purchase history
+  cartItems     CartItem[] // Shopping cart items
+  courseProgress CourseProgress[] // Slide viewing progress
+  
+  @@index([email])
+  @@map("users") // Table name in database
+}
+
+// NextAuth required tables for OAuth
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String  // google, apple, etc.
+  providerAccountId String  // User's ID from the provider
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model VerificationToken {
+  identifier String   // Email address
+  token      String   @unique // Random token
+  expires    DateTime // Expiration time
+
+  @@unique([identifier, token])
+  @@map("verification_tokens")
+}
+
+// ============================================================================
+// COURSE MANAGEMENT
+// ============================================================================
+
+model Course {
+  id          String   @id @default(cuid())
+  title       String   // "Concealed Carry Weapon (CCW) Certification Course"
+  description String   @db.Text // Full course description
+  price       Decimal  @db.Decimal(10, 2) // Course price (e.g., 39.99)
+  isActive    Boolean  @default(true) // Can be disabled without deleting
+  
+  // Course metadata
+  duration    Int?     // Estimated minutes to complete (optional)
+  passingScore Int     @default(80) // Percentage needed to pass (80%)
+  maxAttempts  Int     @default(3) // Quiz attempts before retake required
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  slides      CourseSlide[] // All slides in the course
+  quiz        Quiz? // The course quiz (one-to-one)
+  enrollments Enrollment[] // Users enrolled
+  orders      OrderItem[] // Order history
+  cartItems   CartItem[] // Items in carts
+  courseProgress CourseProgress[] // User progress tracking
+  
+  @@map("courses")
+}
+
+model CourseSlide {
+  id          String   @id @default(cuid())
+  courseId    String   // Which course this belongs to
+  slideNumber Int      // Order of the slide (1, 2, 3...)
+  title       String?  // Optional slide title
+  content     String?  @db.Text // Slide content/notes
+  imageUrl    String?  // URL to slide image (if converted to images)
+  pdfPage     Int?     // If using PDF, which page number
+  
+  // Viewing requirements
+  minViewTime Int      @default(10) // Seconds user must view (default 10)
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  viewedSlides SlideView[] // Track who viewed this slide
+  
+  @@unique([courseId, slideNumber]) // Prevent duplicate slide numbers
+  @@index([courseId])
+  @@map("course_slides")
+}
+
+model CourseProgress {
+  id              String   @id @default(cuid())
+  userId          String
+  courseId        String
+  
+  // Progress tracking
+  currentSlide    Int      @default(1) // Last slide they were on
+  totalSlides     Int      // Total slides in course (cached for convenience)
+  completedSlides Int      @default(0) // How many they've viewed
+  isCompleted     Boolean  @default(false) // Finished all slides?
+  
+  // Timestamps
+  startedAt       DateTime @default(now())
+  completedAt     DateTime? // When they finished all slides
+  lastAccessedAt  DateTime @default(now()) // Last time they viewed
+  
+  // Relations
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course          Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, courseId]) // One progress record per user per course
+  @@index([userId])
+  @@index([courseId])
+  @@map("course_progress")
+}
+
+model SlideView {
+  id          String   @id @default(cuid())
+  userId      String
+  slideId     String
+  
+  // Tracking
+  viewedAt    DateTime @default(now())
+  timeSpent   Int?     // Seconds spent on this slide (optional tracking)
+  
+  // Relations
+  slide       CourseSlide @relation(fields: [slideId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, slideId]) // User can only view a slide once (mark as viewed)
+  @@index([userId])
+  @@index([slideId])
+  @@map("slide_views")
+}
+
+// ============================================================================
+// QUIZ MANAGEMENT
+// ============================================================================
+
+enum QuestionType {
+  MULTIPLE_CHOICE
+  TRUE_FALSE
+}
+
+model Quiz {
+  id          String   @id @default(cuid())
+  courseId    String   @unique // One quiz per course
+  title       String   // Quiz title
+  description String?  @db.Text // Instructions
+  
+  // Quiz settings
+  passingScore Int     @default(80) // Percentage to pass
+  randomizeQuestions Boolean @default(false) // Randomize question order?
+  showResults Boolean @default(true) // Show results after submission?
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  questions   QuizQuestion[] // All questions in quiz
+  attempts    QuizAttempt[] // User attempts
+  
+  @@map("quizzes")
+}
+
+model QuizQuestion {
+  id          String   @id @default(cuid())
+  quizId      String
+  questionNumber Int   // Order of question (1, 2, 3...)
+  questionText String @db.Text // The actual question
+  type        QuestionType // Multiple choice or true/false
+  
+  // Answer options (JSON array)
+  // For multiple choice: ["Option A", "Option B", "Option C", "Option D"]
+  // For true/false: ["True", "False"]
+  options     String[] // Array of possible answers
+  
+  correctAnswer String // The correct answer text (must match one option exactly)
+  
+  // Metadata
+  explanation String? @db.Text // Optional explanation of correct answer
+  points      Int     @default(1) // Points for this question (all 1 for now)
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  answers     QuizAnswer[] // User answers to this question
+  
+  @@unique([quizId, questionNumber]) // Prevent duplicate question numbers
+  @@index([quizId])
+  @@map("quiz_questions")
+}
+
+enum AttemptStatus {
+  IN_PROGRESS // User started but hasn't submitted
+  COMPLETED   // Submitted and graded
+  ABANDONED   // Started but never finished (cleanup)
+}
+
+model QuizAttempt {
+  id          String   @id @default(cuid())
+  userId      String
+  quizId      String
+  
+  // Attempt tracking
+  attemptNumber Int    // Which attempt this is (1, 2, 3...)
+  status      AttemptStatus @default(IN_PROGRESS)
+  
+  // Scoring
+  score       Int?     // Percentage score (0-100)
+  totalQuestions Int   // Total questions in quiz
+  correctAnswers Int?  // Number of correct answers
+  passed      Boolean? // Did they pass? (null until graded)
+  
+  // Timestamps
+  startedAt   DateTime @default(now())
+  submittedAt DateTime? // When they submitted
+  completedAt DateTime? // When grading finished
+  
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  quiz        Quiz     @relation(fields: [quizId], references: [id], onDelete: Cascade)
+  answers     QuizAnswer[] // Their answers
+  certificate Certificate? // Certificate if they passed
+  
+  @@index([userId])
+  @@index([quizId])
+  @@index([userId, quizId]) // For finding user's attempts on a quiz
+  @@map("quiz_attempts")
+}
+
+model QuizAnswer {
+  id          String   @id @default(cuid())
+  attemptId   String   // Which quiz attempt
+  questionId  String   // Which question
+  
+  // Answer data
+  selectedAnswer String // What the user chose
+  isCorrect   Boolean  // Was it right?
+  
+  // Timestamps
+  answeredAt  DateTime @default(now())
+  
+  // Relations
+  attempt     QuizAttempt  @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  question    QuizQuestion @relation(fields: [questionId], references: [id], onDelete: Cascade)
+  
+  @@unique([attemptId, questionId]) // One answer per question per attempt
+  @@index([attemptId])
+  @@map("quiz_answers")
+}
+
+// ============================================================================
+// CERTIFICATES
+// ============================================================================
+
+enum CertificateStatus {
+  ACTIVE   // Valid certificate
+  REVOKED  // Admin revoked it
+  EXPIRED  // Time-based expiration (if needed later)
+}
+
+model Certificate {
+  id              String   @id @default(cuid())
+  userId          String
+  courseId        String   // Which course completed
+  attemptId       String   @unique // Which quiz attempt earned it
+  
+  // Certificate details
+  certificateNumber String @unique // Unique verification code (e.g., "CCW-2024-ABC123")
+  fullName        String   // User's name on certificate
+  courseName      String   // Course name (cached)
+  score           Int      // Their quiz score
+  status          CertificateStatus @default(ACTIVE)
+  
+  // PDF generation
+  pdfUrl          String?  // URL to generated PDF certificate
+  pdfGenerated    Boolean  @default(false)
+  
+  // Timestamps
+  issuedAt        DateTime @default(now())
+  revokedAt       DateTime? // When it was revoked
+  revokedReason   String?  @db.Text // Why it was revoked
+  
+  // Relations
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  attempt         QuizAttempt @relation(fields: [attemptId], references: [id], onDelete: Cascade)
+  
+  @@index([userId])
+  @@index([certificateNumber]) // For verification lookups
+  @@map("certificates")
+}
+
+// ============================================================================
+// ENROLLMENT MANAGEMENT
+// ============================================================================
+
+model Enrollment {
+  id          String   @id @default(cuid())
+  userId      String
+  courseId    String
+  
+  // Access control
+  hasAccess   Boolean  @default(true) // Can be revoked by admin
+  isLifetime  Boolean  @default(true) // Lifetime access (true for now)
+  expiresAt   DateTime? // Future: time-limited access
+  
+  // Purchase info
+  orderId     String?  // Which order granted access
+  grantedBy   String?  // "purchase" or "admin" or admin user ID
+  
+  // Timestamps
+  enrolledAt  DateTime @default(now())
+  lastAccessedAt DateTime? // Last time they viewed course
+  
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, courseId]) // User can only enroll once per course
+  @@index([userId])
+  @@index([courseId])
+  @@map("enrollments")
+}
+
+// ============================================================================
+// PAYMENT & ORDERS
+// ============================================================================
+
+enum OrderStatus {
+  PENDING    // Payment initiated but not complete
+  COMPLETED  // Payment successful
+  FAILED     // Payment failed
+  REFUNDED   // Order refunded
+  CANCELLED  // Order cancelled
+}
+
+model Order {
+  id              String   @id @default(cuid())
+  userId          String
+  
+  // Order details
+  orderNumber     String   @unique // Human-readable order number
+  status          OrderStatus @default(PENDING)
+  
+  // Pricing
+  subtotal        Decimal  @db.Decimal(10, 2) // Before discounts
+  discount        Decimal  @db.Decimal(10, 2) @default(0) // Promo code discount
+  total           Decimal  @db.Decimal(10, 2) // Final amount
+  
+  // Payment info
+  stripePaymentId String?  // Stripe payment intent ID
+  stripeSessionId String?  // Stripe checkout session ID
+  paymentMethod   String?  // "card", "google_pay", etc.
+  
+  // Promo code
+  promoCodeId     String?  // Which promo code was used
+  
+  // Timestamps
+  createdAt       DateTime @default(now())
+  paidAt          DateTime? // When payment completed
+  refundedAt      DateTime? // When refunded
+  
+  // Relations
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items           OrderItem[] // Items in this order
+  promoCode       PromoCode? @relation(fields: [promoCodeId], references: [id])
+  
+  @@index([userId])
+  @@index([orderNumber])
+  @@map("orders")
+}
+
+model OrderItem {
+  id          String   @id @default(cuid())
+  orderId     String
+  courseId    String
+  
+  // Pricing at time of purchase (cached)
+  courseName  String   // Course name at purchase
+  price       Decimal  @db.Decimal(10, 2) // Price at purchase
+  quantity    Int      @default(1) // Always 1 for courses
+  
+  // Relations
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  course      Course   @relation(fields: [courseId], references: [id])
+  
+  @@index([orderId])
+  @@map("order_items")
+}
+
+// ============================================================================
+// SHOPPING CART
+// ============================================================================
+
+model CartItem {
+  id          String   @id @default(cuid())
+  userId      String
+  courseId    String
+  
+  // Cart metadata
+  quantity    Int      @default(1) // Always 1 for courses
+  addedAt     DateTime @default(now())
+  
+  // Relations
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  course      Course   @relation(fields: [courseId], references: [id], onDelete: Cascade)
+  
+  @@unique([userId, courseId]) // Can't add same course twice
+  @@index([userId])
+  @@map("cart_items")
+}
+
+// ============================================================================
+// PROMO CODES
+// ============================================================================
+
+enum DiscountType {
+  PERCENTAGE // 20% off
+  FIXED      // $10 off
+}
+
+model PromoCode {
+  id          String   @id @default(cuid())
+  code        String   @unique // "SAVE20", "WELCOME", etc.
+  
+  // Discount details
+  discountType DiscountType
+  discountValue Decimal @db.Decimal(10, 2) // 20 for 20% or 10 for $10
+  
+  // Restrictions
+  isActive    Boolean  @default(true)
+  maxUses     Int?     // Total uses allowed (null = unlimited)
+  usedCount   Int      @default(0) // How many times used
+  minPurchase Decimal? @db.Decimal(10, 2) // Minimum order amount
+  
+  // Validity period
+  validFrom   DateTime? // When it becomes active
+  validUntil  DateTime? // When it expires
+  
+  // Timestamps
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  // Relations
+  orders      Order[] // Orders that used this code
+  
+  @@index([code])
+  @@map("promo_codes")
+}
