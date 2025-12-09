@@ -2,7 +2,6 @@ import NextAuth from "next-auth"
 import { PrismaAdapter } from "@auth/prisma-adapter"
 import { PrismaClient } from "@prisma/client"
 import Google from "next-auth/providers/google"
-import Apple from "next-auth/providers/apple"
 import Credentials from "next-auth/providers/credentials"
 import bcrypt from "bcryptjs"
 import { z } from "zod"
@@ -18,14 +17,14 @@ declare module "next-auth" {
       id: string
       email: string
       name: string | null
-      image: string | null  // Add this line
+      image: string | null
       role: "USER" | "ADMIN"
     }
   }
 
   interface User {
     role: "USER" | "ADMIN"
-    image?: string | null  // Add this line
+    image?: string | null
   }
 }
 
@@ -52,12 +51,6 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
           response_type: "code",
         },
       },
-    }),
-
-    // Apple Sign In
-    Apple({
-      clientId: process.env.APPLE_CLIENT_ID!,
-      clientSecret: process.env.APPLE_CLIENT_SECRET!,
     }),
 
     // Email/Password authentication
@@ -126,7 +119,7 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       }
 
       // OAuth sign in - update user's email verification
-      if (account?.provider === "google" || account?.provider === "apple") {
+      if (account?.provider === "google") {
         await prisma.user.update({
           where: { id: token.id as string },
           data: { emailVerified: new Date() },
@@ -138,13 +131,13 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
     // Called whenever session is checked
     async session({ session, token }) {
-  if (session.user) {
-    session.user.id = token.id as string
-    session.user.role = token.role as "USER" | "ADMIN"
-    session.user.image = token.picture as string | null  // Add this line
-  }
-  return session
-},
+      if (session.user) {
+        session.user.id = token.id as string
+        session.user.role = token.role as "USER" | "ADMIN"
+        session.user.image = token.picture as string | null
+      }
+      return session
+    },
   },
 
   // Custom pages

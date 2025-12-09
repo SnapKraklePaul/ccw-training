@@ -2,14 +2,21 @@ import { auth, signIn } from "@/auth"
 import { redirect } from "next/navigation"
 import Link from "next/link"
 
-export default async function LoginPage() {
+export default async function LoginPage({
+  searchParams,
+}: {
+  searchParams: { registered?: string; verified?: string; error?: string }
+}) {
   // Check if user is already logged in
   const session = await auth()
   
   if (session?.user) {
-    // Already logged in, redirect to dashboard or home
     redirect("/dashboard")
   }
+
+  const registered = searchParams.registered === "true"
+  const verified = searchParams.verified === "true"
+  const error = searchParams.error
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
@@ -23,6 +30,32 @@ export default async function LoginPage() {
             Access your CCW training courses
           </p>
         </div>
+
+        {/* Success Message - Registration */}
+        {registered && (
+          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg">
+            <p className="text-sm">
+              Account created successfully! You can now sign in.
+            </p>
+          </div>
+        )}
+
+        {/* Success Message - Email Verified */}
+        {verified && (
+          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded-lg">
+            <p className="text-sm font-medium mb-1">Email Verified! ✓</p>
+            <p className="text-sm">
+              Your email has been verified. You can now sign in and access all features.
+            </p>
+          </div>
+        )}
+
+        {/* Error Message */}
+        {error && (
+          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+            <p className="text-sm">{error}</p>
+          </div>
+        )}
 
         {/* Login Options */}
         <div className="mt-8 space-y-4">
@@ -71,15 +104,13 @@ export default async function LoginPage() {
             </div>
           </div>
 
-          {/* Email/Password Login - We'll build this next */}
-          <div className="text-center">
-            <Link
-              href="/login/credentials"
-              className="text-sm text-blue-600 hover:text-blue-500"
-            >
-              Sign in with email and password
-            </Link>
-          </div>
+          {/* Email/Password Login Link */}
+          <Link
+            href="/login/credentials"
+            className="block w-full text-center px-4 py-3 border border-gray-300 rounded-lg shadow-sm bg-white text-gray-700 hover:bg-gray-50 font-medium transition-colors"
+          >
+            Sign in with email and password
+          </Link>
 
           {/* Register Link */}
           <div className="text-center pt-4">
