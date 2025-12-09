@@ -27,34 +27,35 @@ enum AuthProvider {
 }
 
 model User {
-  id            String    @id @default(cuid()) // Unique identifier
-  email         String    @unique // User's email (unique across platform)
-  emailVerified DateTime? // When email was verified (null if not verified)
-  name          String? // Full name (optional, can be from OAuth)
-  password      String? // Hashed password (null for OAuth users)
-  role          UserRole  @default(USER) // User role for permissions
-  authProvider  AuthProvider @default(EMAIL) // How they signed up
+  id            String    @id @default(cuid())
+  email         String    @unique
+  emailVerified DateTime?
+  name          String?
+  image         String?   // Add this line for profile pictures
+  password      String?
+  role          UserRole  @default(USER)
+  authProvider  AuthProvider @default(EMAIL)
   
   // Account status
-  isActive      Boolean   @default(true) // Can be set to false to ban user
-  isSuspended   Boolean   @default(false) // Temporary suspension
+  isActive      Boolean   @default(true)
+  isSuspended   Boolean   @default(false)
   
   // Timestamps
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
   
-  // Relations
-  accounts      Account[] // For OAuth (NextAuth requirement)
-  sessions      Session[] // Active login sessions (NextAuth requirement)
-  enrollments   Enrollment[] // Courses user has purchased
-  quizAttempts  QuizAttempt[] // All quiz attempts
-  certificates  Certificate[] // Earned certificates
-  orders        Order[] // Purchase history
-  cartItems     CartItem[] // Shopping cart items
-  courseProgress CourseProgress[] // Slide viewing progress
+  // Relations (keep all the existing relations)
+  accounts      Account[]
+  sessions      Session[]
+  enrollments   Enrollment[]
+  quizAttempts  QuizAttempt[]
+  certificates  Certificate[]
+  orders        Order[]
+  cartItems     CartItem[]
+  courseProgress CourseProgress[]
   
   @@index([email])
-  @@map("users") // Table name in database
+  @@map("users")
 }
 
 // NextAuth required tables for OAuth
