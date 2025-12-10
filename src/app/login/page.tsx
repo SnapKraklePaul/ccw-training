@@ -5,8 +5,10 @@ import Link from "next/link"
 export default async function LoginPage({
   searchParams,
 }: {
-  searchParams: { registered?: string; verified?: string; error?: string }
+  searchParams: Promise<{ registered?: string; verified?: string; error?: string }>
 }) {
+  const params = await searchParams
+  
   // Check if user is already logged in
   const session = await auth()
   
@@ -14,9 +16,9 @@ export default async function LoginPage({
     redirect("/dashboard")
   }
 
-  const registered = searchParams.registered === "true"
-  const verified = searchParams.verified === "true"
-  const error = searchParams.error
+  const registered = params.registered === "true"
+  const verified = params.verified === "true"
+  const error = params.error
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">

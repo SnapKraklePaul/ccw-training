@@ -5,8 +5,10 @@ import Link from "next/link"
 export default async function CredentialsLoginPage({
   searchParams,
 }: {
-  searchParams: { error?: string }
+  searchParams: Promise<{ error?: string }>
 }) {
+  const params = await searchParams
+  
   // Check if user is already logged in
   const session = await auth()
   
@@ -14,7 +16,7 @@ export default async function CredentialsLoginPage({
     redirect("/dashboard")
   }
 
-  const error = searchParams.error
+  const error = params.error
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
