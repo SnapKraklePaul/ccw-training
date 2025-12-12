@@ -35,10 +35,13 @@ export default function SlideViewer({
   const [currentSlideIndex, setCurrentSlideIndex] = useState(
     initialProgress.currentSlide - 1
   )
-  const [timeRemaining, setTimeRemaining] = useState(
-    slides[initialProgress.currentSlide - 1]?.minViewTime || 10
-  )
-  const [canProceed, setCanProceed] = useState(false)
+  // const [timeRemaining, setTimeRemaining] = useState(
+  //   slides[initialProgress.currentSlide - 1]?.minViewTime || 10
+  // )
+
+  const [timeRemaining, setTimeRemaining] = useState(0)
+
+  const [canProceed, setCanProceed] = useState(true)
   const [loading, setLoading] = useState(false)
 
   const currentSlide = slides[currentSlideIndex]
@@ -79,11 +82,18 @@ export default function SlideViewer({
       })
 
       // Move to next slide
+      // if (currentSlideIndex < slides.length - 1) {
+      //   const nextIndex = currentSlideIndex + 1
+      //   setCurrentSlideIndex(nextIndex)
+      //   setTimeRemaining(slides[nextIndex].minViewTime)
+      //   setCanProceed(false)
+
       if (currentSlideIndex < slides.length - 1) {
-        const nextIndex = currentSlideIndex + 1
-        setCurrentSlideIndex(nextIndex)
-        setTimeRemaining(slides[nextIndex].minViewTime)
-        setCanProceed(false)
+  const nextIndex = currentSlideIndex + 1
+  setCurrentSlideIndex(nextIndex)
+  setTimeRemaining(0)  // Changed from slides[nextIndex].minViewTime
+  setCanProceed(true)  // Changed from false
+
       } else {
         // Course completed - mark as complete and redirect to quiz
         await fetch("/api/course/complete", {

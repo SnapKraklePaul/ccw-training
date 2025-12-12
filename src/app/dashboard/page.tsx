@@ -14,7 +14,7 @@ export default async function DashboardPage() {
     redirect("/login")
   }
 
-  // Get user with enrollments
+  // Get user with enrollments and certificates
   const user = await prisma.user.findUnique({
     where: { id: session.user.id },
     include: {
@@ -22,6 +22,10 @@ export default async function DashboardPage() {
         include: {
           course: true,
         },
+      },
+      certificates: {
+        where: { status: "ACTIVE" },
+        orderBy: { issuedAt: "desc" },
       },
     },
   })
@@ -70,6 +74,41 @@ export default async function DashboardPage() {
             </div>
           </div>
         </div>
+
+        {/* Certificates Section */}
+        {user?.certificates && user.certificates.length > 0 && (
+          <div className="bg-white rounded-lg shadow p-6 mb-6">
+            <h3 className="text-xl font-semibold text-gray-900 mb-4">
+              🎓 Your Certificates
+            </h3>
+            <div className="space-y-3">
+              {user.certificates.map((cert) => (
+                <div
+                  key={cert.id}
+                  className="flex justify-between items-center p-4 bg-green-50 border border-green-200 rounded-lg"
+                >
+                  <div>
+                    <h4 className="font-semibold text-gray-900">
+                      {cert.courseName}
+                    </h4>
+                    <p className="text-sm text-gray-600">
+                      Score: {cert.score}% • Issued: {new Date(cert.issuedAt).toLocaleDateString()}
+                    </p>
+                    <p className="text-xs text-gray-500 font-mono mt-1">
+                      {cert.certificateNumber}
+                    </p>
+                  </div>
+                  <Link
+                    href={`/certificate/${cert.certificateNumber}`}
+                    className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 font-medium transition-colors"
+                  >
+                    View Certificate
+                  </Link>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
 
         {/* Course Access Section */}
         <div className="bg-white rounded-lg shadow p-6">
